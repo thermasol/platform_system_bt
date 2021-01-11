@@ -60,8 +60,8 @@ extern void sco_data_received(BT_HDR* packet);
 
 int gServerSocket = -1;
 bool gKeepGoing = false;
-pthread_t gServerThread = nullptr;
-std::deque<BT_HDR> gAclReceived;
+pthread_t gServerThread;
+std::deque<BT_HDR*> gAclReceived;
 
 android::sp<IBluetoothHci> btHci;
 
@@ -109,14 +109,14 @@ class BluetoothHciCallbacks : public IBluetoothHciCallbacks {
   Return<void> aclDataReceived(const hidl_vec<uint8_t>& data) {
     BT_HDR* packet = WrapPacketAndCopy(MSG_HC_TO_STACK_HCI_ACL, data);
 
-    BT_HDR copy;
-    copy.event = packet->event;
-    copy.len = packet->len;
-    copy.offset = packet->offset;
-    copy.layer_specific = packet->layer_specific;
+    size_t packet_size = data.size() + BT_HDR_SIZE;
+    BT_HDR* copy = reinterpret_cast<BT_HDR*>(buffer_allocator->alloc(packet_size));
+    copy->event = packet->event;
+    copy->len = packet->len;
+    copy->offset = packet->offset;
+    copy->layer_specific = packet->layer_specific;
 
-    copy.data = (uint8_t*)malloc(packet->len);
-    memcpy(copy.data, packet->data, packet->len);
+    memcpy(copy->data, packet->data, packet->len);
     gAclReceived.push_back(copy);
 
     acl_event_received(packet);
@@ -150,12 +150,12 @@ void* server(void*) {
     int sock = accept(gServerSocket, (struct sockaddr *)&address, (socklen_t *)&addrlen);
     while (gKeepGoing && sent != -1) {
       if (gAclReceived.size() > 0) {
-          BT_HDR data = gAclReceived.front();
-          sent = send(sock, &data, packet->len + 4*(sizeof(uint16_t)), 0);
+          BT_HDR* data = gAclReceived.front();
+          sent = send(sock, &data, data->len + BT_HDR_SIZE, 0);
           gAclReceived.pop_front();
-          free(data.data);
+          buffer_allocator_get_interface()->free(data);
       } else {
-          pthread_yield();
+          gKeepGoing = sched_yield() == 0;
       }
     }
   }
@@ -184,7 +184,7 @@ void hci_initialize() {
   }
 
   gServerSocket = socket(AF_INET, SOCK_STREAM, 0);
-  gKeepGoing = pthread_create(&thread, nullptr, gServerThread, &gServerSocket) == 0;
+  gKeepGoing = pthread_create(&gServerThread, nullptr, server, &gServerSocket) == 0;
 }
 
 void hci_close() {
