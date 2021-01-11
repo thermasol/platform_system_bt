@@ -24,6 +24,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <unistd.h>
+#include <pthread.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <deque>
+
 #include <base/location.h>
 #include <base/logging.h>
 #include "buffer_allocator.h"
@@ -51,6 +57,11 @@ extern void initialization_complete();
 extern void hci_event_received(const base::Location& from_here, BT_HDR* packet);
 extern void acl_event_received(BT_HDR* packet);
 extern void sco_data_received(BT_HDR* packet);
+
+int gServerSocket = -1;
+bool gKeepGoing = false;
+pthread_t gServerThread = nullptr;
+std::deque<BT_HDR> gAclReceived;
 
 android::sp<IBluetoothHci> btHci;
 
@@ -97,6 +108,17 @@ class BluetoothHciCallbacks : public IBluetoothHciCallbacks {
 
   Return<void> aclDataReceived(const hidl_vec<uint8_t>& data) {
     BT_HDR* packet = WrapPacketAndCopy(MSG_HC_TO_STACK_HCI_ACL, data);
+
+    BT_HDR copy;
+    copy.event = packet->event;
+    copy.len = packet->len;
+    copy.offset = packet->offset;
+    copy.layer_specific = packet->layer_specific;
+
+    copy.data = (uint8_t*)malloc(packet->len);
+    memcpy(copy.data, packet->data, packet->len);
+    gAclReceived.push_back(copy);
+
     acl_event_received(packet);
     return Void();
   }
@@ -109,6 +131,37 @@ class BluetoothHciCallbacks : public IBluetoothHciCallbacks {
 
   const allocator_t* buffer_allocator;
 };
+
+#define PORT 57344
+
+void* server(void*) {
+
+  struct sockaddr_in address;
+  int addrlen = sizeof(address);
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = INADDR_ANY;
+  address.sin_port = htons(PORT);
+
+  bind(gServerSocket, (struct sockaddr *) &address, sizeof(address));
+  listen(gServerSocket, 1);
+
+  while(gKeepGoing) {
+    int sent = 0;
+    int sock = accept(gServerSocket, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+    while (gKeepGoing && sent != -1) {
+      if (gAclReceived.size() > 0) {
+          BT_HDR data = gAclReceived.front();
+          sent = send(sock, &data, packet->len + 4*(sizeof(uint16_t)), 0);
+          gAclReceived.pop_front();
+          free(data.data);
+      } else {
+          pthread_yield();
+      }
+    }
+  }
+
+  return nullptr;
+}
 
 void hci_initialize() {
   LOG_INFO(LOG_TAG, "%s", __func__);
@@ -129,6 +182,9 @@ void hci_initialize() {
     android::sp<IBluetoothHciCallbacks> callbacks = new BluetoothHciCallbacks();
     btHci->initialize(callbacks);
   }
+
+  gServerSocket = socket(AF_INET, SOCK_STREAM, 0);
+  gKeepGoing = pthread_create(&thread, nullptr, gServerThread, &gServerSocket) == 0;
 }
 
 void hci_close() {
@@ -140,6 +196,11 @@ void hci_close() {
   }
   btHci->close();
   btHci = nullptr;
+
+  gKeepGoing = false;
+  shutdown(gServerSocket, SHUT_RD); // Break accept
+  pthread_join(gServerThread, nullptr);
+  close(gServerSocket);
 }
 
 void hci_transmit(BT_HDR* packet) {
