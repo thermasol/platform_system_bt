@@ -127,9 +127,11 @@ class BluetoothHciCallbacks : public IBluetoothHciCallbacks {
 
     // Only buffer a small amount of data
     while (gAclReceived.size() > PACKET_BUFFER_SIZE) {
+      pthread_mutex_lock(&gPacketLock);
       BT_HDR* data = gAclReceived.front();
       gAclReceived.pop_front();
       buffer_allocator->free(data);
+      pthread_mutex_unlock(&gPacketLock);
     }
 
     acl_event_received(packet);
@@ -163,6 +165,7 @@ void* server(void*) {
     int sock = accept(gServerSocket, (struct sockaddr *)&address, (socklen_t *)&addrlen);
     while (gKeepGoing && sent != -1) {
       if (gAclReceived.size() > 0) {
+          pthread_mutex_lock(&gPacketLock);
           BT_HDR data = *gAclReceived.front();
           sent = send(sock, &data, BT_HDR_SIZE, 0);
           if (sent != BT_HDR_SIZE){
@@ -172,7 +175,6 @@ void* server(void*) {
           if (sent != data.len){
               break;
           }
-          pthread_mutex_lock(&gPacketLock);
           buffer_allocator_get_interface()->free(gAclReceived.front());
           gAclReceived.pop_front();
           pthread_mutex_unlock(&gPacketLock);
