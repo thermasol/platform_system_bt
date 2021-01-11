@@ -63,6 +63,7 @@ extern void sco_data_received(BT_HDR* packet);
 int gServerSocket = -1;
 bool gKeepGoing = false;
 pthread_t gServerThread;
+pthread_mutex_t gPacketLock;
 std::deque<BT_HDR*> gAclReceived;
 
 android::sp<IBluetoothHci> btHci;
@@ -119,7 +120,10 @@ class BluetoothHciCallbacks : public IBluetoothHciCallbacks {
     copy->layer_specific = packet->layer_specific;
 
     memcpy(copy->data, packet->data, packet->len);
+
+    pthread_mutex_lock(&gPacketLock);
     gAclReceived.push_back(copy);
+    pthread_mutex_unlock(&gPacketLock);
 
     // Only buffer a small amount of data
     while (gAclReceived.size() > PACKET_BUFFER_SIZE) {
@@ -159,10 +163,19 @@ void* server(void*) {
     int sock = accept(gServerSocket, (struct sockaddr *)&address, (socklen_t *)&addrlen);
     while (gKeepGoing && sent != -1) {
       if (gAclReceived.size() > 0) {
-          BT_HDR* data = gAclReceived.front();
-          sent = send(sock, &data, data->len + BT_HDR_SIZE, 0);
+          BT_HDR data = *gAclReceived.front();
+          sent = send(sock, &data, BT_HDR_SIZE, 0);
+          if (sent != BT_HDR_SIZE){
+              break;
+          }
+          sent = send(sock, data.data, data.len, 0);
+          if (sent != data.len){
+              break;
+          }
+          pthread_mutex_lock(&gPacketLock);
+          buffer_allocator_get_interface()->free(gAclReceived.front());
           gAclReceived.pop_front();
-          buffer_allocator_get_interface()->free(data);
+          pthread_mutex_unlock(&gPacketLock);
       } else {
           gKeepGoing = sched_yield() == 0;
       }
@@ -193,6 +206,8 @@ void hci_initialize() {
   }
 
   gServerSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+  pthread_mutex_init(&gPacketLock, nullptr);
   gKeepGoing = pthread_create(&gServerThread, nullptr, server, nullptr) == 0;
 }
 
@@ -209,6 +224,7 @@ void hci_close() {
   gKeepGoing = false;
   shutdown(gServerSocket, SHUT_RD); // Break accept
   pthread_join(gServerThread, nullptr);
+  pthread_mutex_destroy(&gPacketLock);
   close(gServerSocket);
 }
 
