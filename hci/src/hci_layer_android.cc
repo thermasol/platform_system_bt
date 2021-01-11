@@ -58,6 +58,8 @@ extern void hci_event_received(const base::Location& from_here, BT_HDR* packet);
 extern void acl_event_received(BT_HDR* packet);
 extern void sco_data_received(BT_HDR* packet);
 
+#define PACKET_BUFFER_SIZE 4096
+
 int gServerSocket = -1;
 bool gKeepGoing = false;
 pthread_t gServerThread;
@@ -118,6 +120,13 @@ class BluetoothHciCallbacks : public IBluetoothHciCallbacks {
 
     memcpy(copy->data, packet->data, packet->len);
     gAclReceived.push_back(copy);
+
+    // Only buffer a small amount of data
+    while (gAclReceived.size() > PACKET_BUFFER_SIZE) {
+      BT_HDR* data = gAclReceived.front();
+      gAclReceived.pop_front();
+      buffer_allocator->free(data);
+    }
 
     acl_event_received(packet);
     return Void();
@@ -184,7 +193,7 @@ void hci_initialize() {
   }
 
   gServerSocket = socket(AF_INET, SOCK_STREAM, 0);
-  gKeepGoing = pthread_create(&gServerThread, nullptr, server, &gServerSocket) == 0;
+  gKeepGoing = pthread_create(&gServerThread, nullptr, server, nullptr) == 0;
 }
 
 void hci_close() {
