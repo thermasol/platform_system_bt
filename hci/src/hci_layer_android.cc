@@ -161,14 +161,13 @@ void* server(void*) {
   listen(gServerSocket, 1);
 
   while(gKeepGoing) {
-    int sent = 0;
     int sock = accept(gServerSocket, (struct sockaddr *)&address, (socklen_t *)&addrlen);
-    while (gKeepGoing && sent != -1) {
+    while (gKeepGoing) {
       if (gAclReceived.size() > 0) {
           const allocator_t* buffer_allocator = buffer_allocator_get_interface();
           pthread_mutex_lock(&gPacketLock);
           BT_HDR data = *gAclReceived.front();
-          sent = send(sock, &data, BT_HDR_SIZE, 0);
+          int sent = send(sock, &data, BT_HDR_SIZE, 0);
           if (sent != BT_HDR_SIZE){
               buffer_allocator->free(gAclReceived.front());
               gAclReceived.pop_front();
@@ -184,7 +183,7 @@ void* server(void*) {
           gAclReceived.pop_front();
           pthread_mutex_unlock(&gPacketLock);
       } else {
-          gKeepGoing = sched_yield() == 0;
+          sched_yield();
       }
     }
     close(sock);
@@ -230,7 +229,7 @@ void hci_close() {
   btHci = nullptr;
 
   gKeepGoing = false;
-  shutdown(gServerSocket, SHUT_RD); // Break accept
+  shutdown(gServerSocket, SHUT_RDWR); // Break loop
   pthread_join(gServerThread, nullptr);
   pthread_mutex_destroy(&gPacketLock);
   close(gServerSocket);
