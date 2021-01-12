@@ -171,7 +171,7 @@ void* server(void*) {
           if (sent != BT_HDR_SIZE){
               break;
           }
-          sent = send(sock, gAclReceived.front() += BT_HDR_SIZE, data.len, 0);
+          sent = send(sock, gAclReceived.front() + BT_HDR_SIZE, data.len, 0);
           if (sent != data.len){
               break;
           }
