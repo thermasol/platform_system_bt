@@ -173,7 +173,7 @@ void* server(void*) {
               gAclReceived.pop_front();
               break;
           }
-          sent = send(sock, gAclReceived.front() + BT_HDR_SIZE, data.len, 0);
+          sent = send(sock, gAclReceived.front()->data, data.len, 0);
           if (sent != data.len){
               buffer_allocator->free(gAclReceived.front());
               gAclReceived.pop_front();
@@ -229,7 +229,7 @@ void hci_close() {
   btHci = nullptr;
 
   gKeepGoing = false;
-  shutdown(gServerSocket, SHUT_RDWR); // Break loop
+  shutdown(gServerSocket, SHUT_RD); // Break accept
   pthread_join(gServerThread, nullptr);
   pthread_mutex_destroy(&gPacketLock);
   close(gServerSocket);
