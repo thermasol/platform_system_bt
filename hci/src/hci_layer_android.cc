@@ -59,7 +59,7 @@ extern void hci_event_received(const base::Location& from_here, BT_HDR* packet);
 extern void acl_event_received(BT_HDR* packet);
 extern void sco_data_received(BT_HDR* packet);
 
-#define PACKET_BUFFER_SIZE 4096
+#define PACKET_BUFFER_SIZE 8
 
 int gServerSocket = -1;
 bool gKeepGoing = false;
