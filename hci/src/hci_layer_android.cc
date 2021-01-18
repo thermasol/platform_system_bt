@@ -25,6 +25,7 @@
 #include <sys/types.h>
 
 #include <unistd.h>
+#include <signal.h>
 #include <pthread.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -171,12 +172,14 @@ void* server(void*) {
           if (sent != BT_HDR_SIZE){
               buffer_allocator->free(gAclReceived.front());
               gAclReceived.pop_front();
+              pthread_mutex_unlock(&gPacketLock);
               break;
           }
           sent = send(sock, gAclReceived.front()->data, data.len, 0);
           if (sent != data.len){
               buffer_allocator->free(gAclReceived.front());
               gAclReceived.pop_front();
+              pthread_mutex_unlock(&gPacketLock);
               break;
           }
           buffer_allocator->free(gAclReceived.front());
@@ -214,6 +217,7 @@ void hci_initialize() {
 
   gServerSocket = socket(AF_INET, SOCK_STREAM, 0);
 
+  signal(SIGPIPE, SIG_IGN);
   pthread_mutex_init(&gPacketLock, nullptr);
   gKeepGoing = pthread_create(&gServerThread, nullptr, server, nullptr) == 0;
 }
@@ -233,6 +237,7 @@ void hci_close() {
   pthread_join(gServerThread, nullptr);
   pthread_mutex_destroy(&gPacketLock);
   close(gServerSocket);
+  signal(SIGPIPE, SIG_DFL);
 }
 
 void hci_transmit(BT_HDR* packet) {
