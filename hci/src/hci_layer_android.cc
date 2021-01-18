@@ -223,6 +223,8 @@ void hci_initialize() {
 }
 
 void hci_close() {
+  LOG_INFO(LOG_TAG, "%s", __func__);
+
   if (btHci != nullptr) {
     auto death_unlink = btHci->unlinkToDeath(bluetoothHciDeathRecipient);
     if (!death_unlink.isOk()) {
