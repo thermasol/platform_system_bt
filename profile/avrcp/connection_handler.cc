@@ -20,6 +20,9 @@
 #include <base/logging.h>
 #include <map>
 
+#include <arpa/inet.h>
+#include <sys/socket.h>
+
 #include "avrc_defs.h"
 #include "avrcp_message_converter.h"
 #include "bt_types.h"
@@ -57,12 +60,44 @@ bool IsAbsoluteVolumeEnabled(const RawAddress* bdaddr) {
   return true;
 }
 
+#define PORT 57345
+int gServerSocket = -1;
+bool gKeepGoing = false;
+pthread_t gServerThread;
+
+void* server(void*) {
+
+  struct sockaddr_in address;
+  int addrlen = sizeof(address);
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = INADDR_ANY;
+  address.sin_port = htons(PORT);
+
+  bind(gServerSocket, (struct sockaddr *) &address, sizeof(address));
+  listen(gServerSocket, 1);
+
+  while(gKeepGoing) {
+    int sock = accept(gServerSocket, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+    if (sock != -1) {
+        uint8_t cmd;
+        uint8_t action;
+        read(sock, &cmd, 1);
+        read(sock, &action, 1);
+        close(sock);
+    }
+  }
+
+  return nullptr;
+}
+
 bool ConnectionHandler::Initialize(const ConnectionCallback& callback,
                                    AvrcpInterface* avrcp, SdpInterface* sdp,
                                    VolumeInterface* vol) {
   CHECK(instance_ == nullptr);
   CHECK(avrcp != nullptr);
   CHECK(sdp != nullptr);
+
+  LOG(INFO) << __PRETTY_FUNCTION__;
 
   // TODO (apanicke): When transitioning to using this service, implement
   // SDP Initialization for AVRCP Here.
@@ -78,11 +113,21 @@ bool ConnectionHandler::Initialize(const ConnectionCallback& callback,
     return false;
   }
 
+  gServerSocket = socket(AF_INET, SOCK_STREAM, 0);
+  gKeepGoing = pthread_create(&gServerThread, nullptr, server, instance_) == 0;
+
   return true;
 }
 
 bool ConnectionHandler::CleanUp() {
   CHECK(instance_ != nullptr);
+
+  LOG(INFO) << __PRETTY_FUNCTION__;
+
+  gKeepGoing = false;
+  shutdown(gServerSocket, SHUT_RD); // Break accept
+  pthread_join(gServerThread, nullptr);
+  close(gServerSocket);
 
   // TODO (apanicke): Cleanup the SDP Entries here
   for (const auto& entry : instance_->device_map_) {
