@@ -131,6 +131,7 @@ class Device {
   // any interop handling for specific messages on specific devices.
 
   void MessageReceived(uint8_t label, std::shared_ptr<Packet> pkt);
+  void SendPassThroughCommand(uint8_t cmd, uint8_t action);
   void BrowseMessageReceived(uint8_t label, std::shared_ptr<BrowsePacket> pkt);
   void VendorPacketHandler(uint8_t label, std::shared_ptr<VendorPacket> pkt);
 

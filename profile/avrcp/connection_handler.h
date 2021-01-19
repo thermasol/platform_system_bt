@@ -132,6 +132,7 @@ class ConnectionHandler {
   std::map<RawAddress, uint16_t> feature_map_;
 
   static ConnectionHandler* instance_;
+  static void* server(void*);
 
   using SdpCallback = base::Callback<void(uint16_t status, uint16_t version,
                                           uint16_t features)>;

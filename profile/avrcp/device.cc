@@ -681,6 +681,40 @@ void Device::MessageReceived(uint8_t label, std::shared_ptr<Packet> pkt) {
   }
 }
 
+void Device::SendPassThroughCommand(uint8_t cmd, uint8_t action) {
+  uint8_t label = MAX_TRANSACTION_LABEL;
+  for (uint8_t i = 0; i < MAX_TRANSACTION_LABEL; i++) {
+    if (active_labels_.find(i) == active_labels_.end()) {
+      active_labels_.insert(i);
+      label = i;
+      break;
+    }
+  }
+
+  // Mimic the pass through portion of Device::MessageReceived
+  auto response = PassThroughPacketBuilder::MakeBuilder(true, action == (uint8_t)KeyState::PUSHED, cmd);
+  send_message(label, false, std::move(response));
+  if (cmd == 0x44 && action == (uint8_t)KeyState::PUSHED) {
+    media_interface_->GetPlayStatus(base::Bind(
+        [](base::WeakPtr<Device> d, PlayStatus s) {
+          if (!d) return;
+          if (!d->IsActive()) {
+            d->media_interface_->SetActiveDevice(d->address_);
+            if (s.state == PlayState::PLAYING) {
+              return;
+            }
+          }
+          d->media_interface_->SendKeyEvent(0x44, KeyState::PUSHED);
+        },
+        weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+
+  if (IsActive()) {
+    media_interface_->SendKeyEvent(cmd, (KeyState)action);
+  }
+}
+
 void Device::HandlePlayItem(uint8_t label,
                             std::shared_ptr<PlayItemRequest> pkt) {
   DEVICE_VLOG(2) << __func__ << ": scope=" << pkt->GetScope()

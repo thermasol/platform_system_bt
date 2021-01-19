@@ -65,7 +65,7 @@ int gServerSocket = -1;
 bool gKeepGoing = false;
 pthread_t gServerThread;
 
-void* server(void*) {
+void* ConnectionHandler::server(void*) {
 
   struct sockaddr_in address;
   int addrlen = sizeof(address);
@@ -83,6 +83,13 @@ void* server(void*) {
         uint8_t action;
         read(sock, &cmd, 1);
         read(sock, &action, 1);
+
+        if (action == (uint8_t)KeyState::PUSHED || action == (uint8_t)KeyState::RELEASED) {
+          for (const auto& entry : instance_->device_map_) {
+            entry.second->SendPassThroughCommand(cmd, action);
+          }
+        }
+
         close(sock);
     }
   }
