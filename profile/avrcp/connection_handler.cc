@@ -280,12 +280,6 @@ void ConnectionHandler::InitiatorControlCb(uint8_t handle, uint8_t event,
         return;
       }
 
-      bool supports_browsing = feature_iter->second & BTA_AV_FEAT_BROWSE;
-
-      if (supports_browsing) {
-        avrc_->OpenBrowse(handle, AVCT_INT);
-      }
-
       // TODO (apanicke): Implement a system to cache SDP entries. For most
       // devices SDP is completed after the device connects AVRCP so that
       // information isn't very useful when trying to control our
@@ -295,7 +289,7 @@ void ConnectionHandler::InitiatorControlCb(uint8_t handle, uint8_t event,
       auto&& ctrl_mtu = avrc_->GetPeerMtu(handle) - AVCT_HDR_LEN;
       auto&& browse_mtu = avrc_->GetBrowseMtu(handle) - AVCT_HDR_LEN;
       std::shared_ptr<Device> newDevice = std::make_shared<Device>(
-          *peer_addr, !supports_browsing, callback, ctrl_mtu, browse_mtu);
+          *peer_addr, callback, ctrl_mtu, browse_mtu);
 
       device_map_[handle] = newDevice;
       // TODO (apanicke): Create the device with all of the interfaces it
@@ -366,7 +360,7 @@ void ConnectionHandler::AcceptorControlCb(uint8_t handle, uint8_t event,
       auto&& ctrl_mtu = avrc_->GetPeerMtu(handle) - AVCT_HDR_LEN;
       auto&& browse_mtu = avrc_->GetBrowseMtu(handle) - AVCT_HDR_LEN;
       std::shared_ptr<Device> newDevice = std::make_shared<Device>(
-          *peer_addr, false, callback, ctrl_mtu, browse_mtu);
+          *peer_addr, callback, ctrl_mtu, browse_mtu);
 
       device_map_[handle] = newDevice;
       connection_cb_.Run(newDevice);

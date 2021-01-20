@@ -186,7 +186,7 @@ void* server(void*) {
           gAclReceived.pop_front();
           pthread_mutex_unlock(&gPacketLock);
       } else {
-          sched_yield();
+          usleep(1);
       }
     }
     close(sock);

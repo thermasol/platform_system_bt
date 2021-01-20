@@ -36,14 +36,13 @@ namespace avrcp {
 #define VOL_REGISTRATION_FAILED -2
 
 Device::Device(
-    const RawAddress& bdaddr, bool avrcp13_compatibility,
+    const RawAddress& bdaddr,
     base::Callback<void(uint8_t label, bool browse,
                         std::unique_ptr<::bluetooth::PacketBuilder> message)>
         send_msg_cb,
     uint16_t ctrl_mtu, uint16_t browse_mtu)
     : weak_ptr_factory_(this),
       address_(bdaddr),
-      avrcp13_compatibility_(avrcp13_compatibility),
       send_message_cb_(send_msg_cb),
       ctrl_mtu_(ctrl_mtu),
       browse_mtu_(browse_mtu) {}
@@ -692,27 +691,8 @@ void Device::SendPassThroughCommand(uint8_t cmd, uint8_t action) {
   }
 
   // Mimic the pass through portion of Device::MessageReceived
-  auto response = PassThroughPacketBuilder::MakeBuilder(true, action == (uint8_t)KeyState::PUSHED, cmd);
+  auto response = PassThroughPacketBuilder::MakeBuilder(false, action == (uint8_t)KeyState::PUSHED, cmd);
   send_message(label, false, std::move(response));
-  if (cmd == 0x44 && action == (uint8_t)KeyState::PUSHED) {
-    media_interface_->GetPlayStatus(base::Bind(
-        [](base::WeakPtr<Device> d, PlayStatus s) {
-          if (!d) return;
-          if (!d->IsActive()) {
-            d->media_interface_->SetActiveDevice(d->address_);
-            if (s.state == PlayState::PLAYING) {
-              return;
-            }
-          }
-          d->media_interface_->SendKeyEvent(0x44, KeyState::PUSHED);
-        },
-        weak_ptr_factory_.GetWeakPtr()));
-    return;
-  }
-
-  if (IsActive()) {
-    media_interface_->SendKeyEvent(cmd, (KeyState)action);
-  }
 }
 
 void Device::HandlePlayItem(uint8_t label,

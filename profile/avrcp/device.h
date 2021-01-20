@@ -60,7 +60,7 @@ class Device {
   friend class ConnectionHandler;
 
   Device(
-      const RawAddress& bdaddr, bool avrcp13_compatibility,
+      const RawAddress& bdaddr,
       base::Callback<void(uint8_t label, bool browse,
                           std::unique_ptr<::bluetooth::PacketBuilder> message)>
           send_msg_cb,
@@ -290,7 +290,7 @@ class Device {
 
   // Enables AVRCP 1.3 Compatibility mode. This disables any AVRCP 1.4+ features
   // such as browsing and playlists but has the highest chance of working.
-  bool avrcp13_compatibility_ = false;
+  const bool avrcp13_compatibility_ = true;
   base::Callback<void(uint8_t label, bool browse,
                       std::unique_ptr<::bluetooth::PacketBuilder> message)>
       send_message_cb_;
