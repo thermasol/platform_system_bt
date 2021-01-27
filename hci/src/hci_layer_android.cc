@@ -61,8 +61,10 @@ extern void sco_data_received(BT_HDR* packet);
 
 #define PACKET_BUFFER_SIZE 8
 
-int gServerSocket = -1;
-bool gKeepGoing = false;
+volatile int  gServerSocket = -1;
+volatile bool gKeepGoing = false;
+volatile bool gHasClient = false;
+
 pthread_t gServerThread;
 pthread_mutex_t gPacketLock;
 std::deque<BT_HDR*> gAclReceived;
@@ -113,18 +115,22 @@ class BluetoothHciCallbacks : public IBluetoothHciCallbacks {
   Return<void> aclDataReceived(const hidl_vec<uint8_t>& data) {
     BT_HDR* packet = WrapPacketAndCopy(MSG_HC_TO_STACK_HCI_ACL, data);
 
-    size_t packet_size = data.size() + BT_HDR_SIZE;
-    BT_HDR* copy = reinterpret_cast<BT_HDR*>(buffer_allocator->alloc(packet_size));
-    copy->event = packet->event;
-    copy->len = packet->len;
-    copy->offset = packet->offset;
-    copy->layer_specific = packet->layer_specific;
+    if (gHasClient){
+        size_t packet_size = data.size() + BT_HDR_SIZE;
+        BT_HDR* copy = reinterpret_cast<BT_HDR*>(buffer_allocator->alloc(packet_size));
+        copy->event = packet->event;
+        copy->len = packet->len;
+        copy->offset = packet->offset;
+        copy->layer_specific = packet->layer_specific;
 
-    memcpy(copy->data, packet->data, packet->len);
+        memcpy(copy->data, packet->data, packet->len);
 
-    pthread_mutex_lock(&gPacketLock);
-    gAclReceived.push_back(copy);
-    pthread_mutex_unlock(&gPacketLock);
+        pthread_mutex_lock(&gPacketLock);
+        gAclReceived.push_back(copy);
+        pthread_mutex_unlock(&gPacketLock);
+    } else {
+        gAcleReceived.clear();
+    }
 
     // Only buffer a small amount of data
     while (gAclReceived.size() > PACKET_BUFFER_SIZE) {
@@ -163,6 +169,7 @@ void* server(void*) {
 
   while(gKeepGoing) {
     int sock = accept(gServerSocket, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+    gHasClient = true;
     while (gKeepGoing) {
       if (gAclReceived.size() > 0) {
           const allocator_t* buffer_allocator = buffer_allocator_get_interface();
@@ -189,6 +196,7 @@ void* server(void*) {
           usleep(1);
       }
     }
+    gHasClient = false;
     close(sock);
   }
 
@@ -223,8 +231,6 @@ void hci_initialize() {
 }
 
 void hci_close() {
-  LOG_INFO(LOG_TAG, "%s", __func__);
-
   if (btHci != nullptr) {
     auto death_unlink = btHci->unlinkToDeath(bluetoothHciDeathRecipient);
     if (!death_unlink.isOk()) {
@@ -235,11 +241,13 @@ void hci_close() {
   btHci = nullptr;
 
   gKeepGoing = false;
+  gHasClient = false;
   shutdown(gServerSocket, SHUT_RD); // Break accept
   pthread_join(gServerThread, nullptr);
   pthread_mutex_destroy(&gPacketLock);
   close(gServerSocket);
   signal(SIGPIPE, SIG_DFL);
+  LOG_INFO(LOG_TAG, "%s", __func__);
 }
 
 void hci_transmit(BT_HDR* packet) {
