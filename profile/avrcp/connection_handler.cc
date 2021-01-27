@@ -61,8 +61,8 @@ bool IsAbsoluteVolumeEnabled(const RawAddress* bdaddr) {
 }
 
 #define PORT 57345
-int gServerSocket = -1;
-bool gKeepGoing = false;
+volatile int  gServerSocket = -1;
+volatile bool gKeepGoing = false;
 pthread_t gServerThread;
 
 void* ConnectionHandler::server(void*) {
@@ -129,12 +129,12 @@ bool ConnectionHandler::Initialize(const ConnectionCallback& callback,
 bool ConnectionHandler::CleanUp() {
   CHECK(instance_ != nullptr);
 
-  LOG(INFO) << __PRETTY_FUNCTION__;
-
   gKeepGoing = false;
   shutdown(gServerSocket, SHUT_RD); // Break accept
   pthread_join(gServerThread, nullptr);
   close(gServerSocket);
+
+  LOG(INFO) << __PRETTY_FUNCTION__;
 
   // TODO (apanicke): Cleanup the SDP Entries here
   for (const auto& entry : instance_->device_map_) {

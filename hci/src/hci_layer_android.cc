@@ -129,7 +129,7 @@ class BluetoothHciCallbacks : public IBluetoothHciCallbacks {
         gAclReceived.push_back(copy);
         pthread_mutex_unlock(&gPacketLock);
     } else {
-        gAcleReceived.clear();
+        gAclReceived.clear();
     }
 
     // Only buffer a small amount of data
