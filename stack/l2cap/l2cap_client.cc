@@ -61,7 +61,7 @@ static void dispatch_fragments(l2cap_client_t* client);
 static l2cap_client_t* find(uint16_t local_channel_id);
 
 // From the Bluetooth Core specification.
-static const uint16_t L2CAP_MTU_DEFAULT = 672;
+static const uint16_t L2CAP_MTU_DEFAULT = L2CAP_MTU_SIZE;
 static const uint16_t L2CAP_MTU_MINIMUM = 48;
 
 static const tL2CAP_APPL_INFO l2cap_callbacks = {
